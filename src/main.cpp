@@ -1,9 +1,10 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
+
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_SH110X.h>
 
 //Rotary Encoder
 #define CLK_PIN 2 //Supports interrupts, used for counting encoder ticks
@@ -14,21 +15,23 @@
 #define SDA_PIN A4
 #define SCL_PIN A5
 
+#define i2c_Address 0x3c //initialize with the I2C addr 0x3C Typically eBay OLED's
+                         // e.g. the one with GM12864-77 written on it
+//#define i2c_Address 0x3d //initialize with the I2C addr 0x3D Typically Adafruit OLED's
+
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-#define SCREEN_ADDRESS 0x3D ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+#define OLED_RESET -1   //   QT-PY / XIAO
+Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 //For measuring encoder position
 volatile int count = 0;
-int currCLK;
-int prevCLK;
+bool count_changed = false;
 
 void setupEncoder();
 void readEncoder();
 void setupOLED();
+void displayCount();
 
 void setup() {
   Serial.begin(9600);
@@ -44,26 +47,26 @@ void setup() {
 
 void loop() {
   //Check for encoder rotation
-  currCLK = digitalRead(CLK_PIN);
-  if (currCLK != prevCLK) readEncoder;
-  prevCLK = currCLK;
+  if (count_changed) {
+    Serial.print("Encoder value changed! Count = ");
+    Serial.println(count);
+    displayCount();
+    count_changed = false;
+  }
 
   //Check for encoder button press
   if(digitalRead(SW_PIN) == LOW) {
     Serial.println("Button pressed");
     delay(200); //for debouncing
   }
-
-
 }
 
 void setupEncoder() {
-  pinMode(CLK_PIN, INPUT);
-  pinMode(DT_PIN, INPUT);
+  pinMode(CLK_PIN, INPUT_PULLUP); //find out what input vs. input_pullup actually does
+  pinMode(DT_PIN, INPUT_PULLUP);
   pinMode(SW_PIN, INPUT_PULLUP);
 
   attachInterrupt(digitalPinToInterrupt(CLK_PIN), readEncoder, CHANGE);
-  prevCLK = digitalRead(CLK_PIN);
   
   Serial.println("Encoder pins setup complete");
 }
@@ -71,23 +74,37 @@ void setupEncoder() {
 void readEncoder() {
   if(digitalRead(CLK_PIN) == digitalRead(DT_PIN)) count++;
   else count--;
-  Serial.println("Encoder value changed! Count = " + count);
+  count_changed = true;
 }
 
 void setupOLED(){
-  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
-  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for(;;); // Don't proceed, loop forever
-  }
-
-  // Show initial display buffer contents on the screen --
-  // the library initializes this with an Adafruit splash screen.
+  display.begin(i2c_Address, true); // Address 0x3C default
+ //display.setContrast (0); // dim display
+ 
   display.display();
-  delay(2000); // Pause for 2 seconds
+  delay(2000);
 
-  // Clear the buffer
+  // Clear the buffer.
   display.clearDisplay();
 
-  Serial.println("OLED setup complete");
+  // draw a single pixel
+  display.drawPixel(10, 10, SH110X_WHITE);
+  // Show the display buffer on the hardware.
+  // NOTE: You _must_ call display after making any drawing commands
+  // to make them visible on the display hardware!
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+}
+
+void displayCount(){
+  display.clearDisplay();
+
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(5,20);
+  display.print("Count = ");
+  display.println(count);
+
+  display.display();
 }
