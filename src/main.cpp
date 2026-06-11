@@ -26,7 +26,10 @@ Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, 
 
 //For measuring encoder position
 volatile int count = 0;
+volatile int alt_count = 0;
+
 bool count_changed = false;
+bool alt_counter = false;
 
 void setupEncoder();
 void readEncoder();
@@ -57,6 +60,7 @@ void loop() {
   //Check for encoder button press
   if(digitalRead(SW_PIN) == LOW) {
     Serial.println("Button pressed");
+    alt_counter = !alt_counter;
     delay(200); //for debouncing
   }
 }
@@ -72,8 +76,14 @@ void setupEncoder() {
 }
 
 void readEncoder() {
-  if(digitalRead(CLK_PIN) == digitalRead(DT_PIN)) count++;
-  else count--;
+  if (!alt_counter) {
+    if(digitalRead(CLK_PIN) == digitalRead(DT_PIN)) count++;
+    else count--;
+  }
+  if (alt_counter) {
+    if(digitalRead(CLK_PIN) == digitalRead(DT_PIN)) alt_count++;
+    else alt_count--;
+  }
   count_changed = true;
 }
 
@@ -89,9 +99,8 @@ void setupOLED(){
 
   // draw a single pixel
   display.drawPixel(10, 10, SH110X_WHITE);
+  
   // Show the display buffer on the hardware.
-  // NOTE: You _must_ call display after making any drawing commands
-  // to make them visible on the display hardware!
   display.display();
   delay(2000);
   display.clearDisplay();
@@ -105,6 +114,10 @@ void displayCount(){
   display.setCursor(5,20);
   display.print("Count = ");
   display.println(count);
+
+  display.setCursor(5,30);
+  display.print("Alt. Count = ");
+  display.println(alt_count);
 
   display.display();
 }
