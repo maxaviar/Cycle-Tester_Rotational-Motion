@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <HardwareSerial.h>
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -30,9 +31,9 @@ void readEncoder();
 void setupOLED();
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   Serial.println("Booting...");
-
+  
   delay(500);
   setupEncoder();
   delay(500);
@@ -53,6 +54,7 @@ void loop() {
     delay(200); //for debouncing
   }
 
+
 }
 
 void setupEncoder() {
@@ -67,9 +69,9 @@ void setupEncoder() {
 }
 
 void readEncoder() {
-  Serial.print("Encoder value changed!");
   if(digitalRead(CLK_PIN) == digitalRead(DT_PIN)) count++;
   else count--;
+  Serial.println("Encoder value changed! Count = " + count);
 }
 
 void setupOLED(){
