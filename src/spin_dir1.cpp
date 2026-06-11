@@ -21,7 +21,6 @@ void dir1_loop(){
 
   digitalWrite(12, HIGH);   //Sets direction of CH A
   analogWrite(3, 255);   //Moves CH A
-  Serial.println("Moving CH A pt1");
 
   delay(delaylength1);
   
@@ -30,7 +29,6 @@ void dir1_loop(){
 
   digitalWrite(13, LOW);   //Sets direction of CH B
   analogWrite(11, 255);   //Moves CH B
-  Serial.println("Moving CH B pt2");
 
   delay(delaylength1);
   
@@ -39,7 +37,6 @@ void dir1_loop(){
 
   digitalWrite(12, LOW);   //Sets direction of CH A
   analogWrite(3, 255);   //Moves CH A
-  Serial.println("Moving CH A pt2");
 
   delay(delaylength1);
     
@@ -48,7 +45,6 @@ void dir1_loop(){
 
   digitalWrite(13, HIGH);   //Sets direction of CH B
   analogWrite(11, 255);   //Moves CH B
-  Serial.println("Moving CH B pt2");
   
   delay(delaylength1);
 }
