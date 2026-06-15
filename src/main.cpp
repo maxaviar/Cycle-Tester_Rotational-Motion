@@ -145,6 +145,7 @@ void readButton() {
     rst_count = false;
     count = 0;
     counter_position = 0;
+    page_number = 0;
   }
   else if ((counter_position == START_POS) && start) {
     run = true;
