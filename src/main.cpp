@@ -8,8 +8,8 @@
 
 //Rotary Encoder
 #define CLK_PIN 2 //Supports interrupts, used for counting encoder ticks
-#define DT_PIN 3 //Supports interrupts, used for counting encoder ticks
-#define SW_PIN 4
+#define DT_PIN 4 
+#define SW_PIN 3 //Supports interrupts, used for counting encoder ticks
 
 //SSD1306 OLED (I2C mode)
 #define SDA_PIN A4
@@ -42,6 +42,8 @@ Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, 
 volatile int speed = 20; // in steps/sec. | Ranges from 20 to 40
 volatile float dwell = 3; // in sec | Ranges from 0 to 7.5
 volatile int rotation_angle = 90; // 90 to 270
+volatile bool start = false;
+volatile bool run = false;
 
 int step_delay = 50;
 int step_number = 0;
@@ -49,7 +51,8 @@ int step_number = 0;
 int counter_position = 0;
 
 void setupEncoder();
-void readEncoder();
+void readDial();
+void readButton();
 
 void setupOLED();
 void displayCount();
@@ -75,17 +78,10 @@ void setup() {
 }
 
 void loop() {
-  //Check for encoder rotation
+  //Will have to change this later to update count with every rotation
   displayCount();
 
-  //Check for encoder button press
-  if(digitalRead(SW_PIN) == LOW) {
-    Serial.println("Button pressed");
-    counter_position = (counter_position+1) % 3;
-    delay(250); //for debouncing
-  }
-  
-  moveByAngle();
+  while(run) moveByAngle();
 }
 
 void setupEncoder() {
@@ -93,12 +89,14 @@ void setupEncoder() {
   pinMode(DT_PIN, INPUT_PULLUP);
   pinMode(SW_PIN, INPUT_PULLUP);
 
-  attachInterrupt(digitalPinToInterrupt(CLK_PIN), readEncoder, RISING);
+  attachInterrupt(digitalPinToInterrupt(CLK_PIN), readDial, RISING);
+  attachInterrupt(digitalPinToInterrupt(SW_PIN), readButton, FALLING); // Maybe on CHANGE instead of LOW?
+
   
   Serial.println("Encoder pins setup complete");
 }
 
-void readEncoder() {
+void readDial() {
   if (counter_position == 0) {
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (speed < MAX_SPEED)) speed++;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (speed > MIN_SPEED)) speed--;
@@ -107,10 +105,31 @@ void readEncoder() {
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (dwell < MAX_DWELL)) dwell+=0.1;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (dwell > MIN_DWELL)) dwell-=0.1;
   }
-  else {
+  else if (counter_position == 2){
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (rotation_angle < MAX_ANGLE)) rotation_angle+=5;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (rotation_angle > MIN_ANGLE)) rotation_angle-=5;
   }
+  else {
+    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) start = !start;
+    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN))) start = !start;
+  }
+}
+
+void readButton() {
+  Serial.println("Button pressed");
+  if (run) {
+    run = false;
+    start = false;
+    Serial.println("Test stopped");
+  }
+  else if ((counter_position == 3) && start) {
+    run = true;
+    Serial.println("Test starting");
+  }
+  
+  else counter_position = (counter_position+1) % 4;
+  
+  delay(250); //for debouncing
 }
 
 void setupOLED(){
@@ -137,21 +156,25 @@ void displayCount(){
 
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-  display.setCursor(5,15);
+  display.setCursor(5,10);
   display.print("Speed = ");
   display.print(speed);
   if (counter_position == 0) display.println(" <-");
 
-  display.setCursor(5,25);
+  display.setCursor(5,20);
   display.print("Dwell = ");
   display.print(dwell);
   if (counter_position == 1) display.println(" <-");
 
-  display.setCursor(5,35);
+  display.setCursor(5,30);
   display.print("Angle = ");
   display.print(rotation_angle);
   if (counter_position == 2) display.println(" <-");
 
+  display.setCursor(5,50);
+  display.print("Start? ");
+  if (start) display.println("Yes");
+  else display.println("No");
 
   display.display();
 }
@@ -172,7 +195,7 @@ void moveCW() {
     digitalWrite(8, HIGH); //DISABLE CH B
 
     digitalWrite(12, HIGH);   //Sets direction of CH A
-    analogWrite(3, 255);   //Moves CH A
+    analogWrite(10, 255);   //Moves CH A
     
     step_number++;
     delay(step_delay);
@@ -192,7 +215,7 @@ void moveCW() {
     digitalWrite(8, HIGH); //DISABLE CH B
 
     digitalWrite(12, LOW);   //Sets direction of CH A
-    analogWrite(3, 255);   //Moves CH A
+    analogWrite(10, 255);   //Moves CH A
 
     step_number++;
     delay(step_delay);
@@ -215,7 +238,7 @@ void moveCCW() {
     digitalWrite(8, HIGH); //DISABLE CH B
 
     digitalWrite(12, HIGH);   //Sets direction of CH A
-    analogWrite(3, 255);   //Moves CH A
+    analogWrite(10, 255);   //Moves CH A
     
     step_number++;
     delay(step_delay);
@@ -235,7 +258,7 @@ void moveCCW() {
     digitalWrite(8, HIGH); //DISABLE CH B
 
     digitalWrite(12, LOW);   //Sets direction of CH A
-    analogWrite(3, 255);   //Moves CH A
+    analogWrite(10, 255);   //Moves CH A
 
     step_number++;
     delay(step_delay);
@@ -257,9 +280,9 @@ void adjustSpeed() {
 }
 
 void moveByAngle() {
-  for (int i=0; i<100; i++) moveCW();
+  for (int i=0; (i<100) && run; i++) moveCW();
   delay(dwell*1000);
 
-  for (int j=100; j>0; j--) moveCCW();
+  for (int j=100; (j>0) && run; j--) moveCCW();
   delay(dwell*1000);
 }
