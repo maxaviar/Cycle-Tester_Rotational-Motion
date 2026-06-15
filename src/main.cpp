@@ -30,25 +30,27 @@ Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, 
 #define MAX_SPEED 40
 #define MIN_DWELL 0.0
 #define MAX_DWELL 7.5
-#define MIN_ANGLE 90
-#define MAX_ANGLE 270
+#define MIN_ANGLE 90.0
+#define MAX_ANGLE 270.0
 
 // For measuring encoder position
-// Volatile bc they get adjusted via interrupts
-// C/Arduino optimizes and stores variables a certain way to help
-// with memory management, but this could mess up data adjusted during
-// an interrupt function since they can run at any point during the loop().
-// Making a variable "volatile" prevents that optimization.
+/*  C/Arduino optimizes and stores variables a certain way to help
+    with memory management, but this could mess up data adjusted during
+    an interrupt function since they can run at any point during the loop().
+    Making a variable "volatile" prevents that optimization. */
+
 volatile int speed = 20; // in steps/sec. | Ranges from 20 to 40
-volatile float dwell = 3; // in sec | Ranges from 0 to 7.5
-volatile int rotation_angle = 90; // 90 to 270
+volatile float dwell = 1; // in sec | Ranges from 0 to 7.5
+volatile float rotation_angle = 90; // 90 to 270
 volatile bool start = false;
+volatile bool rst_count = false;
 volatile bool run = false;
 
-int step_delay = 50;
+float step_delay = 50;
 int step_number = 0;
-
+int loop_for_x_steps = 50;
 int counter_position = 0;
+long count = 0;
 
 void setupEncoder();
 void readDial();
@@ -60,7 +62,7 @@ void displayCount();
 void setupStepper();
 void moveCW();
 void moveCCW();
-void adjustSpeed();
+void adjustSpeedAndAngle();
 void moveByAngle();
 
 void setup() {
@@ -80,8 +82,11 @@ void setup() {
 void loop() {
   //Will have to change this later to update count with every rotation
   displayCount();
+  adjustSpeedAndAngle();
 
-  while(run) moveByAngle();
+  while(run) {
+    moveByAngle();
+  }
 }
 
 void setupEncoder() {
@@ -106,8 +111,12 @@ void readDial() {
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (dwell > MIN_DWELL)) dwell-=0.1;
   }
   else if (counter_position == 2){
-    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (rotation_angle < MAX_ANGLE)) rotation_angle+=5;
-    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (rotation_angle > MIN_ANGLE)) rotation_angle-=5;
+    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (rotation_angle < MAX_ANGLE)) rotation_angle+=STEP_DEGREES;
+    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (rotation_angle > MIN_ANGLE)) rotation_angle-=STEP_DEGREES;
+  }
+  else if (counter_position == 3) {
+    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) rst_count = !rst_count;
+    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN))) rst_count = !rst_count;
   }
   else {
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) start = !start;
@@ -117,17 +126,24 @@ void readDial() {
 
 void readButton() {
   Serial.println("Button pressed");
+
   if (run) {
     run = false;
     start = false;
+    counter_position = 0;
     Serial.println("Test stopped");
   }
-  else if ((counter_position == 3) && start) {
+  else if ((counter_position == 3) && rst_count) {
+    rst_count = false;
+    count = 0;
+    counter_position = 0;
+    Serial.println("Count has been reset");
+  }
+  else if ((counter_position == 4) && start) {
     run = true;
     Serial.println("Test starting");
   }
-  
-  else counter_position = (counter_position+1) % 4;
+  else counter_position = (counter_position+1) % 5;
   
   delay(250); //for debouncing
 }
@@ -156,25 +172,38 @@ void displayCount(){
 
   display.setTextSize(1);
   display.setTextColor(SH110X_WHITE);
-  display.setCursor(5,10);
-  display.print("Speed = ");
+  display.setCursor(0,0);
+  display.print("Speed: ");
   display.print(speed);
-  if (counter_position == 0) display.println(" <-");
+  display.print(" step/sec");
+  if (counter_position == 0) display.println(" *");
 
-  display.setCursor(5,20);
-  display.print("Dwell = ");
+  display.setCursor(0,10);
+  display.print("Dwell: ");
   display.print(dwell);
-  if (counter_position == 1) display.println(" <-");
+  display.print(" sec");
+  if (counter_position == 1) display.println(" *");
 
-  display.setCursor(5,30);
-  display.print("Angle = ");
+  display.setCursor(0,20);
+  display.print("Angle: ");
   display.print(rotation_angle);
-  if (counter_position == 2) display.println(" <-");
+  display.print(" deg");
+  if (counter_position == 2) display.println(" *");
 
-  display.setCursor(5,50);
+  display.setCursor(0,30);
+  display.print("Count = ");
+  display.print(count);
+  if (counter_position == 3){
+    display.println(" *");
+    display.setCursor(0,40);
+    if (!rst_count) display.println("Reset? No");
+    else display.println("Reset? Yes");
+  }
+  display.setCursor(0,55);
   display.print("Start? ");
-  if (start) display.println("Yes");
-  else display.println("No");
+  if (start) display.print("Yes");
+  else display.print("No");
+  if (counter_position == 4) display.println(" *");
 
   display.display();
 }
@@ -204,7 +233,7 @@ void moveCW() {
     digitalWrite(9, HIGH);  //DISABLE CH A
     digitalWrite(8, LOW); //ENABLE CH B
 
-    digitalWrite(13, LOW);   //Sets direction of CH B
+    digitalWrite(13, HIGH);   //Sets direction of CH B
     analogWrite(11, 255);   //Moves CH B
 
     step_number++;
@@ -224,7 +253,7 @@ void moveCW() {
     digitalWrite(9, HIGH);  //DISABLE CH A
     digitalWrite(8, LOW); //ENABLE CH B
 
-    digitalWrite(13, HIGH);   //Sets direction of CH B
+    digitalWrite(13, LOW);   //Sets direction of CH B
     analogWrite(11, 255);   //Moves CH B
     
     step_number = 0;
@@ -247,7 +276,7 @@ void moveCCW() {
     digitalWrite(9, HIGH);  //DISABLE CH A
     digitalWrite(8, LOW); //ENABLE CH B
 
-    digitalWrite(13, HIGH);   //Sets direction of CH B
+    digitalWrite(13, LOW);   //Sets direction of CH B
     analogWrite(11, 255);   //Moves CH B
 
     step_number++;
@@ -267,7 +296,7 @@ void moveCCW() {
     digitalWrite(9, HIGH);  //DISABLE CH A
     digitalWrite(8, LOW); //ENABLE CH B
 
-    digitalWrite(13, LOW);   //Sets direction of CH B
+    digitalWrite(13, HIGH);   //Sets direction of CH B
     analogWrite(11, 255);   //Moves CH B
     
     step_number = 0;
@@ -275,14 +304,19 @@ void moveCCW() {
   }
 }
 
-void adjustSpeed() {
+void adjustSpeedAndAngle() {
   step_delay = 1000/speed;
+  loop_for_x_steps = rotation_angle / STEP_DEGREES;
 }
 
 void moveByAngle() {
-  for (int i=0; (i<100) && run; i++) moveCW();
+  for (int i=0; (i<loop_for_x_steps) && run; i++) moveCW();
+  if (run) count++;
+  displayCount();
   delay(dwell*1000);
 
-  for (int j=100; (j>0) && run; j--) moveCCW();
+  for (int j=loop_for_x_steps; (j>0) && run; j--) moveCCW();
+  if (run) count++;
+  displayCount();
   delay(dwell*1000);
 }
