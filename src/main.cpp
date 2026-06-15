@@ -40,10 +40,11 @@ Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, 
 // an interrupt function since they can run at any point during the loop().
 // Making a variable "volatile" prevents that optimization.
 volatile int speed = 20; // in steps/sec. | Ranges from 20 to 40
-volatile float dwell = 0; // in sec | Ranges from 0 to 7.5
+volatile float dwell = 3; // in sec | Ranges from 0 to 7.5
 volatile int rotation_angle = 90; // 90 to 270
 
-int step_delay = 0;
+int step_delay = 50;
+int step_number = 0;
 
 int counter_position = 0;
 
@@ -57,7 +58,7 @@ void setupStepper();
 void moveCW();
 void moveCCW();
 void adjustSpeed();
-void adjustDwell();
+void moveByAngle();
 
 void setup() {
   Serial.begin(9600);
@@ -84,10 +85,7 @@ void loop() {
     delay(250); //for debouncing
   }
   
-  /* Just for testing out rotating the stepper back and forth
-  for(int i=0;i<10;i++) moveCW();
-  for(int j=0;j<10;j++) moveCCW();
-  */
+  moveByAngle();
 }
 
 void setupEncoder() {
@@ -105,7 +103,7 @@ void readEncoder() {
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (speed < MAX_SPEED)) speed++;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (speed > MIN_SPEED)) speed--;
   }
-  else if (counter_position == 1) {
+  else if (counter_position == 1) { //Figure out why only this one goes negative
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (dwell < MAX_DWELL)) dwell+=0.1;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (dwell > MIN_DWELL)) dwell-=0.1;
   }
@@ -169,77 +167,99 @@ void setupStepper() {
 }
 
 void moveCW() {
-  digitalWrite(9, LOW);  //ENABLE CH A
-  digitalWrite(8, HIGH); //DISABLE CH B
+  if (step_number == 0){  
+    digitalWrite(9, LOW);  //ENABLE CH A
+    digitalWrite(8, HIGH); //DISABLE CH B
 
-  digitalWrite(12, HIGH);   //Sets direction of CH A
-  analogWrite(3, 255);   //Moves CH A
-
-  delay(30);
-  
-  digitalWrite(9, HIGH);  //DISABLE CH A
-  digitalWrite(8, LOW); //ENABLE CH B
-
-  digitalWrite(13, LOW);   //Sets direction of CH B
-  analogWrite(11, 255);   //Moves CH B
-
-  delay(30);
-  
-  digitalWrite(9, LOW);  //ENABLE CH A
-  digitalWrite(8, HIGH); //DISABLE CH B
-
-  digitalWrite(12, LOW);   //Sets direction of CH A
-  analogWrite(3, 255);   //Moves CH A
-
-  delay(30);
+    digitalWrite(12, HIGH);   //Sets direction of CH A
+    analogWrite(3, 255);   //Moves CH A
     
-  digitalWrite(9, HIGH);  //DISABLE CH A
-  digitalWrite(8, LOW); //ENABLE CH B
+    step_number++;
+    delay(step_delay);
+  }
+  else if (step_number == 1) {
+    digitalWrite(9, HIGH);  //DISABLE CH A
+    digitalWrite(8, LOW); //ENABLE CH B
 
-  digitalWrite(13, HIGH);   //Sets direction of CH B
-  analogWrite(11, 255);   //Moves CH B
-  
-  delay(30);
+    digitalWrite(13, LOW);   //Sets direction of CH B
+    analogWrite(11, 255);   //Moves CH B
+
+    step_number++;
+    delay(step_delay);
+  }
+  else if (step_number == 2) {
+    digitalWrite(9, LOW);  //ENABLE CH A
+    digitalWrite(8, HIGH); //DISABLE CH B
+
+    digitalWrite(12, LOW);   //Sets direction of CH A
+    analogWrite(3, 255);   //Moves CH A
+
+    step_number++;
+    delay(step_delay);
+  }
+  else if (step_number == 3) {
+    digitalWrite(9, HIGH);  //DISABLE CH A
+    digitalWrite(8, LOW); //ENABLE CH B
+
+    digitalWrite(13, HIGH);   //Sets direction of CH B
+    analogWrite(11, 255);   //Moves CH B
+    
+    step_number = 0;
+    delay(step_delay);
+  }
 }
 
 void moveCCW() {
-  digitalWrite(9, LOW);  //ENABLE CH A
-  digitalWrite(8, HIGH); //DISABLE CH B
+  if (step_number == 0){  
+    digitalWrite(9, LOW);  //ENABLE CH A
+    digitalWrite(8, HIGH); //DISABLE CH B
 
-  digitalWrite(12, HIGH);   //Sets direction of CH A
-  analogWrite(3, 255);   //Moves CH A
-  
-  delay(30);
-  
-  digitalWrite(9, HIGH);  //DISABLE CH A
-  digitalWrite(8, LOW); //ENABLE CH B
-
-  digitalWrite(13, HIGH);   //Sets direction of CH B
-  analogWrite(11, 255);   //Moves CH B
-  
-  delay(30);
-  
-  digitalWrite(9, LOW);  //ENABLE CH A
-  digitalWrite(8, HIGH); //DISABLE CH B
-
-  digitalWrite(12, LOW);   //Sets direction of CH A
-  analogWrite(3, 255);   //Moves CH A
-  
-  delay(30);
+    digitalWrite(12, HIGH);   //Sets direction of CH A
+    analogWrite(3, 255);   //Moves CH A
     
-  digitalWrite(9, HIGH);  //DISABLE CH A
-  digitalWrite(8, LOW); //ENABLE CH B
+    step_number++;
+    delay(step_delay);
+  }
+  else if (step_number == 1) {
+    digitalWrite(9, HIGH);  //DISABLE CH A
+    digitalWrite(8, LOW); //ENABLE CH B
 
-  digitalWrite(13, LOW);   //Sets direction of CH B
-  analogWrite(11, 255);   //Moves CH B
-  
-  delay(30);
+    digitalWrite(13, HIGH);   //Sets direction of CH B
+    analogWrite(11, 255);   //Moves CH B
+
+    step_number++;
+    delay(step_delay);
+  }
+  else if (step_number == 2) {
+    digitalWrite(9, LOW);  //ENABLE CH A
+    digitalWrite(8, HIGH); //DISABLE CH B
+
+    digitalWrite(12, LOW);   //Sets direction of CH A
+    analogWrite(3, 255);   //Moves CH A
+
+    step_number++;
+    delay(step_delay);
+  }
+  else if (step_number == 3) {
+    digitalWrite(9, HIGH);  //DISABLE CH A
+    digitalWrite(8, LOW); //ENABLE CH B
+
+    digitalWrite(13, LOW);   //Sets direction of CH B
+    analogWrite(11, 255);   //Moves CH B
+    
+    step_number = 0;
+    delay(step_delay);
+  }
 }
 
 void adjustSpeed() {
-
+  step_delay = 1000/speed;
 }
 
-void adjustDwell() {
+void moveByAngle() {
+  for (int i=0; i<100; i++) moveCW();
+  delay(dwell*1000);
 
+  for (int j=100; j>0; j--) moveCCW();
+  delay(dwell*1000);
 }
