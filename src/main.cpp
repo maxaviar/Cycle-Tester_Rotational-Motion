@@ -24,6 +24,13 @@
 #define OLED_RESET -1   //   QT-PY / XIAO
 Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
+#define SPEED_POS 0
+#define DWELL_POS 1
+#define ANGLE_POS 2
+#define PAGE_POS 3
+#define COUNT_POS 4
+#define START_POS 5
+
 #define STEP_DEGREES 1.8
 
 #define MIN_SPEED 20
@@ -42,6 +49,7 @@ Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, 
 volatile int speed = 20; // in steps/sec. | Ranges from 20 to 40
 volatile float dwell = 1; // in sec | Ranges from 0 to 7.5
 volatile float rotation_angle = 90; // 90 to 270
+volatile int page_number = 0;
 volatile bool start = false;
 volatile bool rst_count = false;
 volatile bool run = false;
@@ -71,9 +79,9 @@ void setup() {
   
   delay(500);
   setupEncoder();
-  delay(500);
+  delay(200);
   setupOLED();
-  delay(500);
+  delay(200);
   setupStepper();
 
   Serial.println("Setup complete");
@@ -102,49 +110,55 @@ void setupEncoder() {
 }
 
 void readDial() {
-  if (counter_position == 0) {
+  if (counter_position == SPEED_POS) {
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (speed < MAX_SPEED)) speed++;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (speed > MIN_SPEED)) speed--;
   }
-  else if (counter_position == 1) { //Figure out why only this one goes negative
+  else if (counter_position == DWELL_POS) { //Figure out why only this one goes negative
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (dwell < MAX_DWELL)) dwell+=0.1;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (dwell > MIN_DWELL)) dwell-=0.1;
   }
-  else if (counter_position == 2){
+  else if (counter_position == ANGLE_POS){
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (rotation_angle < MAX_ANGLE)) rotation_angle+=STEP_DEGREES;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (rotation_angle > MIN_ANGLE)) rotation_angle-=STEP_DEGREES;
   }
-  else if (counter_position == 3) {
+  else if (counter_position == PAGE_POS) {
+    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) page_number = (page_number+1)%2;
+  }
+  else if (counter_position == COUNT_POS) {
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) rst_count = !rst_count;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN))) rst_count = !rst_count;
   }
-  else {
+  else if (counter_position == START_POS){
     if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) start = !start;
     else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN))) start = !start;
   }
 }
 
 void readButton() {
-  Serial.println("Button pressed");
-
   if (run) {
     run = false;
     start = false;
     counter_position = 0;
-    Serial.println("Test stopped");
   }
-  else if ((counter_position == 3) && rst_count) {
+  else if ((counter_position == COUNT_POS) && rst_count) {
     rst_count = false;
     count = 0;
     counter_position = 0;
-    Serial.println("Count has been reset");
   }
-  else if ((counter_position == 4) && start) {
+  else if ((counter_position == START_POS) && start) {
     run = true;
-    Serial.println("Test starting");
+    page_number = 0;
   }
-  else counter_position = (counter_position+1) % 5;
-  
+  else if (page_number == 0) {
+    counter_position = (counter_position+1) % 4;
+  }
+  else {
+    counter_position = (counter_position+1) % 6;
+    if (counter_position == 0) {
+        counter_position = PAGE_POS;
+    }
+  }
   delay(250); //for debouncing
 }
 
@@ -170,41 +184,65 @@ void setupOLED(){
 void displayCount(){
   display.clearDisplay();
 
-  display.setTextSize(1);
-  display.setTextColor(SH110X_WHITE);
-  display.setCursor(0,0);
-  display.print("Speed: ");
-  display.print(speed);
-  display.print(" step/sec");
-  if (counter_position == 0) display.println(" *");
+  if (page_number == 0){
+    display.setTextSize(1);
+    display.setTextColor(SH110X_WHITE);
+    display.setCursor(0,0);
+    display.print("Speed: ");
+    display.print(speed);
+    display.print(" step/sec");
+    if (counter_position == SPEED_POS) display.println(" *");
 
-  display.setCursor(0,10);
-  display.print("Dwell: ");
-  display.print(dwell);
-  display.print(" sec");
-  if (counter_position == 1) display.println(" *");
+    display.setCursor(0,10);
+    display.print("Dwell: ");
+    display.print(dwell);
+    display.print(" sec");
+    if (counter_position == DWELL_POS) display.println(" *");
 
-  display.setCursor(0,20);
-  display.print("Angle: ");
-  display.print(rotation_angle);
-  display.print(" deg");
-  if (counter_position == 2) display.println(" *");
+    display.setCursor(0,20);
+    display.print("Angle: ");
+    display.print(rotation_angle);
+    display.print(" deg");
+    if (counter_position == ANGLE_POS) display.println(" *");
 
-  display.setCursor(0,30);
-  display.print("Count = ");
-  display.print(count);
-  if (counter_position == 3){
-    display.println(" *");
-    display.setCursor(0,40);
-    if (!rst_count) display.println("Reset? No");
-    else display.println("Reset? Yes");
+    display.setCursor(0,30);
+    display.print("Count = ");
+    display.print(count);
+  
+    display.setCursor(0,55);
+    if (!run){
+      display.print("Page (1/2)");
+      if (counter_position == PAGE_POS) display.println(" *");
+    }
+    else {
+      display.println("Press button to stop");
+    }
   }
-  display.setCursor(0,55);
-  display.print("Start? ");
-  if (start) display.print("Yes");
-  else display.print("No");
-  if (counter_position == 4) display.println(" *");
 
+  else {
+    display.setCursor(0,20);
+    display.print("Reset?");
+    if (!rst_count)
+      display.print(" No");
+    else
+      display.print(" Yes");
+    if (counter_position == COUNT_POS)
+      display.println(" *");
+
+    display.setCursor(0,30);
+    display.print("Start? ");
+    if (start)
+      display.print("Yes");
+    else
+      display.print("No");
+    
+    if (counter_position == START_POS)
+      display.println(" *");
+
+    display.setCursor(0,55);
+    display.print("Page (2/2)");
+    if (counter_position == PAGE_POS) display.println(" *");
+  } 
   display.display();
 }
 
