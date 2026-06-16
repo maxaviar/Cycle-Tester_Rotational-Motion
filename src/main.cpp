@@ -1,27 +1,26 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
-
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
 
-//Rotary Encoder
+//Rotary Encoder Pins
 #define CLK_PIN 2 //Supports interrupts, used for counting encoder ticks
-#define DT_PIN 4 
 #define SW_PIN 3 //Supports interrupts, used for counting encoder ticks
+#define DT_PIN 4 
 
-//SSD1306 OLED (I2C mode)
+//SSD1306 OLED (I2C mode) Pins
 #define SDA_PIN A4
 #define SCL_PIN A5
 
+//OLED macros
 #define i2c_Address 0x3c //initialize with the I2C addr 0x3C Typically eBay OLED's
-                         // e.g. the one with GM12864-77 written on it
 //#define i2c_Address 0x3d //initialize with the I2C addr 0x3D Typically Adafruit OLED's
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define OLED_RESET -1   //   QT-PY / XIAO
+#define OLED_RESET -1   //  QT-PY / XIAO
 Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define SPEED_POS 0
@@ -31,8 +30,8 @@ Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, 
 #define COUNT_POS 4
 #define START_POS 5
 
+//Stepper macros
 #define STEP_DEGREES 1.8
-
 #define MIN_SPEED 20
 #define MAX_SPEED 40
 #define MIN_DWELL 0.0
@@ -60,6 +59,7 @@ int loop_for_x_steps = 50;
 int counter_position = 0;
 long count = 0;
 
+//Function prototypes separated by which component they are most relevant to
 void setupEncoder();
 void readDial();
 void readButton();
