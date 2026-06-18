@@ -4,11 +4,14 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
+#include "Adafruit_seesaw.h"
+#include <seesaw_neopixel.h>
 
-//Rotary Encoder Pins
-#define CLK_PIN 2 //Supports interrupts, used for counting encoder ticks
-#define SW_PIN 3 //Supports interrupts, used for counting encoder ticks
-#define DT_PIN 4 
+//Encoder pins
+#define SS_SWITCH   24
+#define INT_PIN     2
+
+#define SEESAW_ADDR 0x36
 
 //SSD1306 OLED (I2C mode) Pins
 #define SDA_PIN A4
@@ -33,25 +36,32 @@ Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, 
 //Stepper macros
 #define STEP_DEGREES 1.8
 #define MIN_SPEED 20
-#define MAX_SPEED 40
+#define MAX_SPEED 80
 #define MIN_DWELL 0.0
 #define MAX_DWELL 7.5
 #define MIN_ANGLE 90.0
 #define MAX_ANGLE 270.0
+
+Adafruit_seesaw ss;
 
 // For measuring encoder position
 /*  C/Arduino optimizes and stores variables a certain way to help
     with memory management, but this could mess up data adjusted during
     an interrupt function since they can run at any point during the loop().
     Making a variable "volatile" prevents that optimization. */
+volatile bool interruptFlag = false;
+volatile unsigned long lastTime = 0;
+const unsigned long debounceDelay = 200;
+int32_t encoder_position = 0;
+bool lastButtonState = false;
 
-volatile int speed = 20; // in steps/sec. | Ranges from 20 to 40
-volatile float dwell = 1; // in sec | Ranges from 0 to 7.5
-volatile float rotation_angle = 90; // 90 to 270
-volatile int page_number = 0;
-volatile bool start = false;
-volatile bool rst_count = false;
-volatile bool run = false;
+int speed = 20; // in steps/sec. | Ranges from 20 to 40
+float dwell = 1; // in sec | Ranges from 0 to 7.5
+float rotation_angle = 90; // 90 to 270
+int page_number = 0;
+bool start = false;
+bool rst_count = false;
+bool run = false;
 
 float step_delay = 50;
 int step_number = 0;
@@ -59,9 +69,9 @@ int loop_for_x_steps = 50;
 int counter_position = 0;
 long count = 0;
 
-//Function prototypes separated by which component they are most relevant to
 void setupEncoder();
-void readDial();
+void routeInterrupt();
+void readDial(bool clockwiseTurn);
 void readButton();
 
 void setupOLED();
@@ -76,8 +86,22 @@ void moveByAngle();
 void setup() {
   Serial.begin(9600);
   Serial.println("Booting...");
-  
+  Wire.end();
   delay(500);
+  //while (!Serial) delay(10);
+
+   // --- MANUALLY UNCLOG THE I2C BUS ---
+  pinMode(SCL_PIN, OUTPUT);
+  pinMode(SDA_PIN, INPUT_PULLUP);
+  
+  // Toggle the clock pin 10 times to force the encoder to release the line
+  for (int i = 0; i < 10; i++) {
+    digitalWrite(SCL_PIN, LOW);
+    delayMicroseconds(5);
+    digitalWrite(SCL_PIN, HIGH);
+    delayMicroseconds(5);
+  }
+
   setupEncoder();
   delay(200);
   setupOLED();
@@ -92,55 +116,109 @@ void loop() {
   displayCount();
   adjustSpeedAndAngle();
 
-  while(run) {
-    moveByAngle();
+  if(interruptFlag) {
+    interruptFlag = false;
+    Serial.println("int marked false1");
+
+    int32_t new_position = ss.getEncoderPosition();
+    bool currButtonState = !ss.digitalRead(SS_SWITCH);
+    bool clockwiseTurn = (new_position > encoder_position);
+
+    if (currButtonState && !lastButtonState) {
+      readButton();
+      delay(200);
+    }
+    Serial.println("checked button");
+
+    // did we move around
+    if (encoder_position != new_position) {
+      encoder_position = new_position;      // and save for next round
+      readDial(clockwiseTurn);
+    }
+    Serial.println("chceked dial");
+    lastButtonState = currButtonState;
   }
+  
+  while(run && !interruptFlag) {
+    moveByAngle();
+    if (interruptFlag) {
+      analogWrite(3, 0);
+      analogWrite(11, 0); 
+    }
+  }
+
+
+  // don't overwhelm serial port
+  delay(50);
 }
 
 void setupEncoder() {
-  pinMode(CLK_PIN, INPUT_PULLUP);
-  pinMode(DT_PIN, INPUT_PULLUP);
-  pinMode(SW_PIN, INPUT_PULLUP);
-
-  attachInterrupt(digitalPinToInterrupt(CLK_PIN), readDial, RISING);
-  attachInterrupt(digitalPinToInterrupt(SW_PIN), readButton, FALLING); // Maybe on CHANGE instead of LOW?
-
+  Serial.println("Looking for seesaw!");
   
-  Serial.println("Encoder pins setup complete");
+  if (!ss.begin(SEESAW_ADDR)) {
+    Serial.println("Couldn't find seesaw on default address");
+    while(1) delay(10);
+  }
+  Serial.println("seesaw started");
+
+  uint32_t version = ((ss.getVersion() >> 16) & 0xFFFF);
+  if (version  != 4991){
+    Serial.print("Wrong firmware loaded? ");
+    Serial.println(version);
+    while(1) delay(10);
+  }
+  Serial.println("Found Product 4991");
+  
+  // get starting position
+  encoder_position = ss.getEncoderPosition();
+
+  Serial.println("Turning on interrupts");
+  delay(10);
+  attachInterrupt(digitalPinToInterrupt(INT_PIN), routeInterrupt, FALLING);
+  ss.pinMode(SS_SWITCH, INPUT_PULLUP);
+  ss.setGPIOInterrupts((uint32_t)1 << SS_SWITCH, 1);
+  ss.enableEncoderInterrupt();  Serial.println("Encoder pins setup complete");
 }
 
-void readDial() {
+void routeInterrupt() {
+  Serial.println("Int ran");
+  interruptFlag = true;
+}
+
+void readDial(bool clockwiseTurn) {
   if (counter_position == SPEED_POS) {
-    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (speed < MAX_SPEED)) speed++;
-    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (speed > MIN_SPEED)) speed--;
+    if((clockwiseTurn) && (speed < MAX_SPEED)) speed++;
+    else if ((!clockwiseTurn) && (speed > MIN_SPEED)) speed--;
   }
   else if (counter_position == DWELL_POS) { //Figure out why only this one goes negative
-    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (dwell < MAX_DWELL)) dwell+=0.1;
-    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (dwell > MIN_DWELL)) dwell-=0.1;
+    if((clockwiseTurn) && (dwell < MAX_DWELL)) dwell+=0.1;
+    else if ((!clockwiseTurn) && (dwell > MIN_DWELL)) dwell-=0.1;
   }
   else if (counter_position == ANGLE_POS){
-    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN)) && (rotation_angle < MAX_ANGLE)) rotation_angle+=STEP_DEGREES;
-    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN)) && (rotation_angle > MIN_ANGLE)) rotation_angle-=STEP_DEGREES;
+    if((clockwiseTurn) && (rotation_angle < MAX_ANGLE)) rotation_angle+=STEP_DEGREES;
+    else if ((!clockwiseTurn) && (rotation_angle > MIN_ANGLE)) rotation_angle-=STEP_DEGREES;
   }
   else if (counter_position == PAGE_POS) {
-    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) page_number = (page_number+1)%2;
+    if(clockwiseTurn) page_number = 1;
+    else if (!clockwiseTurn) page_number = 0;
   }
   else if (counter_position == COUNT_POS) {
-    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) rst_count = !rst_count;
-    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN))) rst_count = !rst_count;
+    if(clockwiseTurn) rst_count = true;
+    else if (!clockwiseTurn) rst_count = false;
   }
   else if (counter_position == START_POS){
-    if((digitalRead(CLK_PIN) == digitalRead(DT_PIN))) start = !start;
-    else if ((digitalRead(CLK_PIN) != digitalRead(DT_PIN))) start = !start;
+    if(clockwiseTurn) start = true;
+    else if (!clockwiseTurn) start = false;
   }
 }
 
 void readButton() {
+  Serial.println("Button pressed");
   if (run) {
-    run = false;
-    start = false;
-    counter_position = 0;
-  }
+      run = false;
+      start = false;
+      counter_position = 0;
+    }
   else if ((counter_position == COUNT_POS) && rst_count) {
     rst_count = false;
     count = 0;
@@ -150,6 +228,7 @@ void readButton() {
   else if ((counter_position == START_POS) && start) {
     run = true;
     page_number = 0;
+    delay(50);
   }
   else if (page_number == 0) {
     counter_position = (counter_position+1) % 4;
@@ -160,7 +239,6 @@ void readButton() {
         counter_position = PAGE_POS;
     }
   }
-  delay(250); //for debouncing
 }
 
 void setupOLED(){
@@ -257,13 +335,13 @@ void setupStepper() {
   pinMode(8, OUTPUT); //brake (disable) CH B
 }
 
-void moveCW() {
+void moveCW() { //Find reset function
   if (step_number == 0){  
     digitalWrite(9, LOW);  //ENABLE CH A
     digitalWrite(8, HIGH); //DISABLE CH B
 
     digitalWrite(12, HIGH);   //Sets direction of CH A
-    analogWrite(10, 255);   //Moves CH A
+    analogWrite(3, 255);   //Moves CH A
     
     step_number++;
     delay(step_delay);
@@ -283,7 +361,7 @@ void moveCW() {
     digitalWrite(8, HIGH); //DISABLE CH B
 
     digitalWrite(12, LOW);   //Sets direction of CH A
-    analogWrite(10, 255);   //Moves CH A
+    analogWrite(3, 255);   //Moves CH A
 
     step_number++;
     delay(step_delay);
@@ -306,7 +384,7 @@ void moveCCW() {
     digitalWrite(8, HIGH); //DISABLE CH B
 
     digitalWrite(12, HIGH);   //Sets direction of CH A
-    analogWrite(10, 255);   //Moves CH A
+    analogWrite(3, 255);   //Moves CH A
     
     step_number++;
     delay(step_delay);
@@ -326,7 +404,7 @@ void moveCCW() {
     digitalWrite(8, HIGH); //DISABLE CH B
 
     digitalWrite(12, LOW);   //Sets direction of CH A
-    analogWrite(10, 255);   //Moves CH A
+    analogWrite(3, 255);   //Moves CH A
 
     step_number++;
     delay(step_delay);
@@ -349,13 +427,19 @@ void adjustSpeedAndAngle() {
 }
 
 void moveByAngle() {
-  for (int i=0; (i<loop_for_x_steps) && run; i++) moveCW();
-  if (run) count++;
+  for (int i=0; (i<loop_for_x_steps); i++) {
+    moveCW();
+    if (interruptFlag) return;
+  }
+  count++;
   displayCount();
   delay(dwell*1000);
 
-  for (int j=loop_for_x_steps; (j>0) && run; j--) moveCCW();
-  if (run) count++;
+  for (int j=loop_for_x_steps; (j>0); j--) {
+    moveCCW();
+    if (interruptFlag) return;
+  }
+  count++;
   displayCount();
   delay(dwell*1000);
 }
