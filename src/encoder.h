@@ -7,7 +7,7 @@
 #define SEESAW_ADDR 0x36
 
 //Stepper macros
-#define MIN_SPEED 20
+#define MIN_SPEED 40
 #define MAX_SPEED 80
 #define MIN_DWELL 0.0
 #define MAX_DWELL 7.5

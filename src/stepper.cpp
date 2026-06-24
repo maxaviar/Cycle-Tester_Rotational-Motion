@@ -101,8 +101,8 @@ void moveCCW() {
 }
 
 void adjustSpeedAndAngle() {
-  stepper.step_delay = 1000/settings.speed;
-  stepper.loop_until = settings.rotation_angle / STEP_DEGREES;
+  stepper.step_delay = 1000/(settings.speed * GEAR_RATIO);
+  stepper.loop_until = (settings.rotation_angle / STEP_DEGREES) * GEAR_RATIO                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ;
 }
 
 void moveByAngle() {
