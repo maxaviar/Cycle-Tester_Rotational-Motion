@@ -5,6 +5,8 @@ volatile bool interruptFlag = false;
 int32_t encoder_position = 0;
 bool lastButtonState = false;
 
+Adafruit_seesaw ss;
+
 void setupEncoder() {
   Serial.println("Looking for seesaw!");
   

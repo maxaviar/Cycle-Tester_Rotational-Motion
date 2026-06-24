@@ -2,6 +2,8 @@
 #include "stepper.h"
 #include "display.h"
 
+Stepper stepper;
+
 void setupStepper() {
     //establish motor direction toggle pins
     pinMode(12, OUTPUT); //CH A -- HIGH = forwards and LOW = backwards???

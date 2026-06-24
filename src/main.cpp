@@ -3,6 +3,8 @@
 #include "encoder.h"
 #include "stepper.h"
 
+Settings settings;
+
 void setup() {
   Serial.begin(9600);
   Serial.println("Booting...");
