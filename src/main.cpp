@@ -24,7 +24,7 @@ void setup() {
   }
 
   setupEncoder();
-  delay(200);
+  delay(200);                                                                                                                                                                                           
   setupOLED();
   delay(200);
   setupStepper();
