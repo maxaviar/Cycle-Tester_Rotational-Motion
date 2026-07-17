@@ -3,122 +3,68 @@
 #include "display.h"
 
 Stepper stepper;
+float step_degrees;
 
 void setupStepper() {
-    //establish motor direction toggle pins
-    pinMode(12, OUTPUT); //CH A -- HIGH = forwards and LOW = backwards???
-    pinMode(13, OUTPUT); //CH B -- HIGH = forwards and LOW = backwards???
+  pinMode(DIR_PIN, OUTPUT);
+  pinMode(PUL_PIN, OUTPUT);
 
-    //establish motor brake pins
-    pinMode(9, OUTPUT); //brake (disable) CH A
-    pinMode(8, OUTPUT); //brake (disable) CH B
+  step_degrees = FULLSTEP_DEGREES / MICROSTEP;
 }
 
-void moveCW() { //Find reset function
-  if (stepper.step_number == 0){  
-    digitalWrite(9, LOW);  //ENABLE CH A
-    digitalWrite(8, HIGH); //DISABLE CH B
+void moveCW() {
+  digitalWrite(DIR_PIN, HIGH); //Set direction
+  delayMicroseconds(10);
 
-    digitalWrite(12, HIGH);   //Sets direction of CH A
-    analogWrite(3, 255);   //Moves CH A
-    
-    stepper.step_number++;
-    delay(stepper.step_delay);
-  }
-  else if (stepper.step_number == 1) {
-    digitalWrite(9, HIGH);  //DISABLE CH A
-    digitalWrite(8, LOW); //ENABLE CH B
-
-    digitalWrite(13, HIGH);   //Sets direction of CH B
-    analogWrite(11, 255);   //Moves CH B
-
-    stepper.step_number++;
-    delay(stepper.step_delay);
-  }
-  else if (stepper.step_number == 2) {
-    digitalWrite(9, LOW);  //ENABLE CH A
-    digitalWrite(8, HIGH); //DISABLE CH B
-
-    digitalWrite(12, LOW);   //Sets direction of CH A
-    analogWrite(3, 255);   //Moves CH A
-
-    stepper.step_number++;
-    delay(stepper.step_delay);
-  }
-  else if (stepper.step_number == 3) {
-    digitalWrite(9, HIGH);  //DISABLE CH A
-    digitalWrite(8, LOW); //ENABLE CH B
-
-    digitalWrite(13, LOW);   //Sets direction of CH B
-    analogWrite(11, 255);   //Moves CH B
-    
-    stepper.step_number = 0;
-    delay(stepper.step_delay);
-  }
+  digitalWrite(PUL_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PUL_PIN, LOW);
+  delayMicroseconds(stepper.step_delay - 10);
 }
 
 void moveCCW() {
-  if (stepper.step_number == 0){  
-    digitalWrite(9, LOW);  //ENABLE CH A
-    digitalWrite(8, HIGH); //DISABLE CH B
+  digitalWrite(DIR_PIN, LOW); //Set direction
+  delayMicroseconds(10);
 
-    digitalWrite(12, HIGH);   //Sets direction of CH A
-    analogWrite(3, 255);   //Moves CH A
-    
-    stepper.step_number++;
-    delay(stepper.step_delay);
-  }
-  else if (stepper.step_number == 1) {
-    digitalWrite(9, HIGH);  //DISABLE CH A
-    digitalWrite(8, LOW); //ENABLE CH B
-
-    digitalWrite(13, LOW);   //Sets direction of CH B
-    analogWrite(11, 255);   //Moves CH B
-
-    stepper.step_number++;
-    delay(stepper.step_delay);
-  }
-  else if (stepper.step_number == 2) {
-    digitalWrite(9, LOW);  //ENABLE CH A
-    digitalWrite(8, HIGH); //DISABLE CH B
-
-    digitalWrite(12, LOW);   //Sets direction of CH A
-    analogWrite(3, 255);   //Moves CH A
-
-    stepper.step_number++;
-    delay(stepper.step_delay);
-  }
-  else if (stepper.step_number == 3) {
-    digitalWrite(9, HIGH);  //DISABLE CH A
-    digitalWrite(8, LOW); //ENABLE CH B
-
-    digitalWrite(13, HIGH);   //Sets direction of CH B
-    analogWrite(11, 255);   //Moves CH B
-    
-    stepper.step_number = 0;
-    delay(stepper.step_delay);
-  }
+  digitalWrite(PUL_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PUL_PIN, LOW);
+  delayMicroseconds(stepper.step_delay - 10);
 }
 
 void adjustSpeedAndAngle() {
-  stepper.step_delay = 1000/(settings.speed * GEAR_RATIO);
-  stepper.loop_until = (settings.rotation_angle / STEP_DEGREES) * GEAR_RATIO                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ;
+  stepper.step_delay = 10*(settings.speed * GEAR_RATIO);
+  stepper.loop_until = (settings.rotation_angle / step_degrees) * GEAR_RATIO;
 }
 
 void moveByAngle() {
-    for (int i=0; (i<stepper.loop_until); i++) {
-    moveCW();
-    if (interruptFlag) return;
-  }
-  settings.count++;
-  displayCount();
-  delay(settings.dwell*1000);
+  //First go counterclockwise, stopping the entire function if interrupted
+  for (int i=0; (i<stepper.loop_until); i++) {
+    if (interruptFlag) {
+      return;
+    }
 
-  for (int j=stepper.loop_until; (j>0); j--) {
     moveCCW();
-    if (interruptFlag) return;
   }
   settings.count++;
   displayCount();
-  delay(settings.dwell*1000);
+  
+  //Allows the stepper to be interrupted while dwelling
+  unsigned long st_time = millis();
+  unsigned long end_time = settings.dwell;
+  while ((millis() < (end_time + st_time)) && !interruptFlag);
+
+  //Same as above but clockwise now
+  for (int j=stepper.loop_until; (j>0); j--) {
+    if (interruptFlag) {
+      return;
+    }
+
+    moveCW();
+  }
+  settings.count++;
+  displayCount();
+
+  st_time = millis();
+  while ((millis() < (end_time + st_time)) && !interruptFlag);
 }

@@ -7,7 +7,7 @@ This project implements a rotational motion mechanism to test the cleaning life 
 - Hardware interrupts used to stop motor at any point in testing.
 
 ## Hardware
-- Arduino R4 Minima
+- Arduino UNO R4 Minima
 - Analog Devices QSH5718 Bipolar Stepper Motor (57mm, 2.8A, 1.26Nm)
 - DFRobot DRI0043 Stepper Controller/Driver
 - Adafruit 326 OLED

@@ -1,5 +1,8 @@
 #pragma once
 
+#define PUL_PIN 11
+#define DIR_PIN 12
+
 //Globals and/or Structs
 struct Stepper {
     float step_delay = 50;
@@ -8,6 +11,7 @@ struct Stepper {
 };
 
 extern Stepper stepper;
+extern float step_degrees;
 
 //Functons
 void setupStepper();

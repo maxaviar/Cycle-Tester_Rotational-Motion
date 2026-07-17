@@ -13,8 +13,9 @@
 #define COUNT_POS 4
 #define START_POS 5
 
-#define STEP_DEGREES 1.8
+#define FULLSTEP_DEGREES 1.8
 #define GEAR_RATIO 4
+#define MICROSTEP 2
 
 //  Global variables
 //  For measuring encoder position
@@ -28,8 +29,8 @@ extern bool lastButtonState;
 
 struct Settings {
     int speed = 40; // in steps/sec. | Ranges from 40 to 80
-    float dwell = 0; // in sec | Ranges from 0 to 7.5
-    float rotation_angle = 90; // 90 to 270
+    float dwell = 0; // in millisec | Ranges from 0 to 7500
+    float rotation_angle = 90; // in degrees | 90 to 270
     bool start = false;
     bool rst_count = false;
     bool run = false;

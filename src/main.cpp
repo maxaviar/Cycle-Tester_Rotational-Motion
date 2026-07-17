@@ -58,11 +58,6 @@ void loop() {
   
   while(settings.run && !interruptFlag) {
     moveByAngle();
-    //Turn off stepper
-    if (interruptFlag) {
-      analogWrite(3, 0);
-      analogWrite(11, 0); 
-    }
   }
 
   // don't overwhelm serial port

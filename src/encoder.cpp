@@ -44,13 +44,13 @@ void readDial(bool clockwiseTurn) {
     if((clockwiseTurn) && (settings.speed < MAX_SPEED)) settings.speed++;
     else if ((!clockwiseTurn) && (settings.speed > MIN_SPEED)) settings.speed--;
   }
-  else if (settings.position == DWELL_POS) { //Figure out why only this one goes negative
-    if((clockwiseTurn) && (settings.dwell < MAX_DWELL)) settings.dwell+=0.1;
-    else if ((!clockwiseTurn) && (settings.dwell > MIN_DWELL)) settings.dwell-=0.1;
+  else if (settings.position == DWELL_POS) { 
+    if((clockwiseTurn) && (settings.dwell < MAX_DWELL)) settings.dwell+=DWELL_INCREMENT;
+    else if ((!clockwiseTurn) && (settings.dwell > MIN_DWELL)) settings.dwell-=DWELL_INCREMENT;
   }
   else if (settings.position == ANGLE_POS){
-    if((clockwiseTurn) && (settings.rotation_angle < MAX_ANGLE)) settings.rotation_angle+=STEP_DEGREES;
-    else if ((!clockwiseTurn) && (settings.rotation_angle > MIN_ANGLE)) settings.rotation_angle-=STEP_DEGREES;
+    if((clockwiseTurn) && (settings.rotation_angle < MAX_ANGLE)) settings.rotation_angle += ANGLE_INCREMENT;
+    else if ((!clockwiseTurn) && (settings.rotation_angle > MIN_ANGLE)) settings.rotation_angle -= ANGLE_INCREMENT;
   }
   else if (settings.position == PAGE_POS) {
     if(clockwiseTurn) settings.page_number = 1;
